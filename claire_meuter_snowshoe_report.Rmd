@@ -32,12 +32,17 @@ i.)
 ```{r}
 bonanza_hares <- read.csv(here("data", "bonanza_hares.csv"))
 juvenile_inv <- bonanza_hares %>%
-  filter(age == "j") %>%
-  mutate(date_new = mdy(date)) %>%
-  mutate(year = year(date_new)) %>%
-  mutate(sex = case_when(
+  filter(age == "j") %>%  #filtered to only keep juvenile samples in new data set
+  mutate(date_new = mdy(date)) %>% # converted dates to date class
+  mutate(year = year(date_new)) %>% # added new column
+  mutate(sex = case_when( # edited sex to show on data as male and female
     sex == "f" ~ "female", 
-    sex == "m" ~ "male"))
+    sex == "m" ~ "male")) %>%
+      mutate(grid = case_when( # edited site names to show as full names 
+        grid == "bonbs" ~ "Bonanza Black Spruce",
+        grid == "bonmat" ~ "Bonanza Mature",
+        grid == "bonrip" ~ "Bonanza Riparian"
+      ))
 ```
  # counted my data by year
 ```{r}
@@ -48,7 +53,7 @@ juvenile_counts <- juvenile_inv %>%
 
 ```{r}
 ggplot(data = juvenile_inv, aes(x = year)) + 
-  geom_histogram(bins = 15, color = "black", fill = "454B1B") + scale_x_continuous(breaks = c(1998, 2000, 2002, 2004, 2006, 2008, 2010, 2012)) + labs(title = "Annual Counts of Trapped Juveniles", x = "Year", y = "Count")
+  geom_histogram(bins = 15, color = "black", fill = "darkolivegreen") + scale_x_continuous(breaks = c(1998, 2000, 2002, 2004, 2006, 2008, 2010, 2012)) + labs(title = "Annual Counts of Trapped Juveniles", x = "Year", y = "Count")
 ```
 
 Figure 1: 
@@ -64,48 +69,9 @@ These are absolute counts, but this count is also impacted by effort (e.g. the n
 juvenile hare weights by sex and site (grid)
 
 
-
-```{r basic_flipper_plot, fig.align = "center"}
-ggplot(data = juvenile_inv, aes(x = sex, y = weight)) +
-  geom_beeswarm(aes(color = sex)) +
-  scale_color_manual(values = c("goldenrod2","cyan4","coral")) +
-  geom_boxplot(fill = NA, width = 0.2, outlier.color = NA) +
-  stat_summary(fun=mean, 
-               geom="point", 
-               shape=20, 
-               size=4, 
-               color="black", 
-               fill="black") +
-  theme_minimal() +
-  labs(x = "\nJuvenile Sex",
-       y = "Juvenile weight (mm)\n") + facet_wrap(~grid)
-```
-
-
-```{r}
-ggplot(data = juvenile_inv, aes(x = grid, y = weight)) + geom_jitter(aes(color = "sex", alpha = 0.5)) + 
-  facet_wrap(~ sex)
-```
 ```{r}
 ggplot(data = juvenile_inv) + geom_jitter(aes(x = sex, y = weight, color = sex)) + 
   facet_wrap(~ grid)
-```
-
-
-
-
-
-
-```{r}
-ggplot(data = juvenile_inv, aes(x = sex, y = weight)) + geom_jitter(aes(color = "sex", alpha = 0.5)) + 
-  facet_wrap(~ grid)
-```
-```{r}
-ggplot(data = juvenile_inv, aes(x = grid, y = weight)) + geom_jitter(aes(color = sex, alpha = 0.5)) 
-```
-
-```{r}
-ggplot(data = juvenile_inv, aes(x = weight)) + geom_histogram(aes(fill = sex, position = "dodge", bins = 10)) + facet_wrap(~ grid)
 ```
 
 
@@ -140,14 +106,56 @@ The actual difference in means
 Effect size (Cohen's *d*) (see effsize::cohen.d() example in the Lab 5 key)
 Outcome of an unpaired two-sample t-test --- lab 6 
 
-
-HOw to do actual differnce of means?
+# Split off into groups, pull sample vectors
 ```{r}
-cohen.d(m, f)
+weight_female <- juvenile_inv %>%
+  filter(sex == "female") %>%
+  drop_na(weight) %>%
+  pull(weight)
+
+weight_male <- juvenile_inv %>%
+  filter(sex == "male") %>%
+  drop_na(weight) %>%
+  pull(weight)
+```
+
+```{r}
+juvenile_t <- t.test(weight_male, weight_female)
+
+juvenile_t
+```
+There is a negligible probability of randomly selecting two samples from populations with the same mean that are this different by chance. They are almost certainly from populations with different mean mpgs - which makes sense. Of course they do. More interesting: How different are they?
+
+There is a low probability (less than 0.05%) of randomly selecting two samples from populations with the same mean that are this different by chance. While it is possible These are very likely from populations with different mean weights. Based on our data table above this makes sense. 
+
+How to do actual difference of means?
+```{r}
+juvenile_weight_cohen <- cohen.d(weight_male, weight_female)
+
+juvenile_weight_cohen # to view
+```
+The effect size was small (Cohen's *d* = `r juvenile_weight_cohen$estimate`).
+
+Writing it all out: Mean weight for males juvenile snowshoe hares (`r round(juvenile_t$estimate[1],2)` grams) is greater than that for female juvenile (`r round(juvenile_t$estimate[2],2)` grams); the effect size is small (Cohen's *d* = `r round(juvenile_weight_cohen$estimate,2)`) and the difference significant (two-sample t-test, t = `r round(juvenile_t$statistic,2)`, p < 0.007)
+
+# Visual data exploration with histograms and QQ-plots
+
+```{r}
+juvenile_male_female <- juvenile_inv %>% 
+  filter(sex %in% c("female", "male"))
 ```
 
 
 
+```{r, include=FALSE}
+ggplot(data = juvenile_male_female, aes(x = weight)) +
+  geom_histogram(bins = 15) +
+  facet_wrap(~sex)
+
+ggplot(data = juvenile_male_female, aes(sample = weight)) +
+  geom_qq() +
+  facet_wrap(~sex)
+```
 
 
 
@@ -156,5 +164,16 @@ cohen.d(m, f)
 
 ## iv.) Relationship between juvenile weight & hind foot length
 Explore the relationship between juvenile snowshoe hare hind foot length (variable `hindft`, recorded in millimeters), and weight. Include all juvenile hares in the study. Create a final visualization of juvenile hare hind foot length versus weight. Include a figure caption.
+
+
+```{r}
+weight_foot_length <- ggplot(data = juvenile_inv) + 
+  geom_point(aes(x = hindft, y = weight), color = "dodgerblue4") +
+  labs(x = "Hind Foot Length (mm)",
+       y = "Juvenile Hare Weights (g)",
+       title = "Juvenile Hare Hind Foot Length by Juvenile Hare Weights" )
+
+weight_foot_length
+```
 
 
